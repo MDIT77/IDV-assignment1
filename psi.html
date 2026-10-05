@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Singapore PSI — Live readings</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #182c38; background: #f3f7f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 48px 20px; }
+    main { max-width: 1050px; margin: 0 auto; }
+    .eyebrow { margin: 0 0 8px; color: #087e8b; font-size: .78rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -.04em; }
+    .intro { margin: 10px 0 28px; color: #50636d; }
+    .panel { overflow-x: auto; border: 1px solid #dce6e9; border-radius: 14px; background: white; box-shadow: 0 8px 28px #18333d0b; }
+    table { width: 100%; border-collapse: collapse; min-width: 700px; text-align: left; }
+    th, td { padding: 15px 18px; border-bottom: 1px solid #e8eef0; white-space: nowrap; }
+    th { background: #f8fbfb; color: #526771; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    td { font-size: .94rem; }
+    tbody tr:last-child td { border-bottom: 0; }
+    td:first-child { font-weight: 700; text-transform: capitalize; }
+    .status { display: flex; justify-content: space-between; gap: 16px; padding: 14px 2px; color: #60747d; font-size: .85rem; }
+    .error { color: #b42318; }
+    .loading { color: #60747d; padding: 22px 18px; }
+    @media (max-width: 600px) { body { padding: 32px 14px; } .status { flex-direction: column; gap: 4px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Singapore air quality</p>
+    <h1>Pollutant Standards Index</h1>
+    <p class="intro">All 12 available readings across Singapore’s five regions. Data refreshes automatically every minute.</p>
+    <div class="panel">
+      <div id="tableContent" class="loading" role="status">Loading the latest readings…</div>
+    </div>
+    <div class="status"><span id="message" aria-live="polite">Connecting to data.gov.sg…</span><span id="timestamp"></span></div>
+  </main>
+  <script>
+    const API_URL = 'https://api-open.data.gov.sg/v2/real-time/api/psi';
+    const REFRESH_MS = 60_000;
+    const regions = ['north', 'south', 'east', 'west', 'central'];
+    const readings = [
+      ['o3_sub_index', 'Ozone sub-index'],
+      ['co_eight_hour_max', 'Carbon monoxide (8h max)'],
+      ['co_sub_index', 'Carbon monoxide sub-index'],
+      ['no2_one_hour_max', 'Nitrogen dioxide (1h max)'],
+      ['o3_eight_hour_max', 'Ozone (8h max)'],
+      ['pm10_sub_index', 'PM10 sub-index'],
+      ['pm10_twenty_four_hourly', 'PM10 (24h)'],
+      ['pm25_sub_index', 'PM2.5 sub-index'],
+      ['pm25_twenty_four_hourly', 'PM2.5 (24h)'],
+      ['so2_sub_index', 'Sulphur dioxide sub-index'],
+      ['so2_twenty_four_hourly', 'Sulphur dioxide (24h)'],
+      ['psi_twenty_four_hourly', '24-hour PSI']
+    ];
+    const content = document.getElementById('tableContent');
+    const message = document.getElementById('message');
+    const timestamp = document.getElementById('timestamp');
+
+    function formatTime(value) {
+      if (!value) return 'Unavailable';
+      return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+    }
+
+    async function refreshReadings() {
+      try {
+        const response = await fetch(API_URL, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Request failed (${response.status})`);
+        const payload = await response.json();
+        const item = payload?.data?.items?.[0];
+        if (payload?.code !== 0 || !item?.readings) throw new Error(payload?.errorMsg || 'No readings are currently available.');
+
+        content.innerHTML = `<table><thead><tr><th scope="col">Reading</th>${regions.map(region => `<th scope="col">${region}</th>`).join('')}</tr></thead><tbody>${readings.map(([key, label]) => `<tr><td>${label}</td>${regions.map(region => `<td>${item.readings[key]?.[region] ?? '—'}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+        message.classList.remove('error');
+        message.textContent = 'Live data · refreshes every minute';
+        timestamp.textContent = `Reading: ${formatTime(item.timestamp)} · Updated: ${formatTime(item.updatedTimestamp)}`;
+      } catch (error) {
+        message.classList.add('error');
+        message.textContent = `${error.message} Retrying in one minute.`;
+        if (!content.querySelector('table')) content.textContent = 'Readings could not be loaded. Check your connection and try again.';
+      }
+    }
+
+    refreshReadings();
+    setInterval(refreshReadings, REFRESH_MS);
+  </script>
+</body>
+</html>
